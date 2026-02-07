@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>同步功能测试</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        .log {
+            background: #f0f0f0;
+            padding: 10px;
+            margin: 5px 0;
+            font-family: monospace;
+        }
+
+        .success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        button {
+            padding: 10px;
+            margin: 5px;
+        }
+
+        input {
+            padding: 5px;
+            margin: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>同步功能测试</h1>
+
+    <div class="section">
+        <h3>1. 测试任务创建</h3>
+        <input type="text" id="taskTitle" placeholder="输入任务标题" value="同步测试任务">
+        <button onclick="testCreateTask()">创建任务</button>
+        <button onclick="testGetTasks()">获取任务列表</button>
+        <div id="taskLog"></div>
+    </div>
+
+    <div class="section">
+        <h3>2. 实时同步测试</h3>
+        <button onclick="testRealtime()">测试实时同步</button>
+        <button onclick="testPolling()">测试轮询同步</button>
+        <div id="syncLog"></div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://rwiulfkdkbkztxfehuuz.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3aXVsZmtka2JrenR4ZmVodXV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAwNTU4MTYsImV4cCI6MjA4NTYzMTgxNn0.mvjgJ5hHPBv3RP8u78IsA3t_i3FM72G80LnNN1q0hMI';
+
+        let client = null;
+        let taskCount = 0;
+
+        function log(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            const time = new Date().toLocaleTimeString();
+            const logDiv = document.createElement('div');
+            logDiv.className = `log ${type}`;
+            logDiv.innerHTML = `[${time}] ${message}`;
+            element.appendChild(logDiv);
+            element.scrollTop = element.scrollHeight;
+        }
+
+        function logTask(message, type = 'info') {
+            log('taskLog', message, type);
+        }
+
+        function logSync(message, type = 'info') {
+            log('syncLog', message, type);
+        }
+
+        async function initClient() {
+            if (client) return client;
+
+            try {
+                logTask('正在连接Supabase...', 'info');
+                client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+                // 测试连接
+                const { data, error } = await client.from('tasks').select('count(*)').single();
+                if (error) throw error;
+
+                logTask('✅ 数据库连接成功', 'success');
+                return client;
+            } catch (error) {
+                logTask(`❌ 连接失败: ${error.message}`, 'error');
+                throw error;
+            }
+        }
+
+        async function testCreateTask() {
+            try {
+                await initClient();
+
+                const title = document.getElementById('taskTitle').value || `测试任务_${Date.now()}`;
+
+                logTask(`创建任务: ${title}`, 'info');
+
+                const taskData = {
+                    title: title,
+                    description: '同步测试任务',
+                    priority: 'medium',
+                    alarm_enabled: false,
+                    completed: false,
+                    notified_today: false,
+                    user_id: `test_user_${Date.now()}`
+                };
+
+                const { data, error } = await client
+                    .from('tasks')
+                    .insert(taskData)
+                    .select()
+                    .single();
+
+                if (error) throw error;
+
+                taskCount++;
+                logTask(`✅ 任务创建成功 (ID: ${data.id})`, 'success');
+                logTask(`标题: ${data.title}`, 'info');
+                logTask(`用户: ${data.user_id}`, 'info');
+
+            } catch (error) {
+                logTask(`❌ 创建失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function testGetTasks() {
+            try {
+                await initClient();
+
+                logTask('获取任务列表...', 'info');
+
+                const { data, error } = await client
+                    .from('tasks')
+                    .select('*')
+                    .order('created_at', { ascending: false })
+                    .limit(10);
+
+                if (error) throw error;
+
+                logTask(`✅ 获取成功，共 ${data.length} 个任务:`, 'success');
+                data.forEach((task, index) => {
+                    logTask(`${index + 1}. ${task.title} (ID: ${task.id}, 用户: ${task.user_id.substring(0, 20)}...)`, 'info');
+                });
+
+            } catch (error) {
+                logTask(`❌ 获取失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function testRealtime() {
+            try {
+                await initClient();
+
+                logSync('测试实时同步...', 'info');
+
+                const channel = client
+                    .channel('test-realtime')
+                    .on('postgres_changes',
+                        { event: '*', schema: 'public', table: 'tasks' },
+                        (payload) => {
+                            logSync(`🔄 实时事件: ${payload.eventType}`, 'success');
+                            logSync(`数据: ${JSON.stringify(payload.new || payload.old)}`, 'info');
+                        }
+                    )
+                    .subscribe((status) => {
+                        if (status === 'SUBSCRIBED') {
+                            logSync('✅ 实时监听已启动', 'success');
+                            logSync('现在可以创建任务测试同步', 'info');
+                        } else {
+                            logSync(`❌ 监听状态: ${status}`, 'error');
+                        }
+                    });
+
+                // 5秒后测试创建任务
+                setTimeout(() => {
+                    logSync('创建测试任务...', 'info');
+                    testCreateTask();
+                }, 2000);
+
+            } catch (error) {
+                logSync(`❌ 实时测试失败: ${error.message}`, 'error');
+            }
+        }
+
+        let pollingInterval = null;
+
+        function testPolling() {
+            try {
+                logSync('测试轮询同步...', 'info');
+
+                let lastTaskCount = 0;
+                let pollCount = 0;
+
+                const checkTasks = async () => {
+                    try {
+                        await initClient();
+                        pollCount++;
+
+                        const { data, error } = await client
+                            .from('tasks')
+                            .select('*')
+                            .order('created_at', { ascending: false });
+
+                        if (error) throw error;
+
+                        const currentCount = data.length;
+                        if (currentCount > lastTaskCount) {
+                            logSync(`🔄 轮询检测到新任务 (${currentCount - lastTaskCount}个)`, 'success');
+                            lastTaskCount = currentCount;
+                        } else if (pollCount % 5 === 0) {
+                            logSync(`轮询检查 #${pollCount}: 当前 ${currentCount} 个任务`, 'info');
+                        }
+
+                    } catch (error) {
+                        logSync(`❌ 轮询检查失败: ${error.message}`, 'error');
+                    }
+                };
+
+                // 立即检查一次
+                checkTasks();
+
+                // 每3秒检查一次
+                pollingInterval = setInterval(checkTasks, 3000);
+                logSync('✅ 轮询同步已启动 (间隔3秒)', 'success');
+                logSync('10秒后停止轮询', 'info');
+
+                setTimeout(() => {
+                    if (pollingInterval) {
+                        clearInterval(pollingInterval);
+                        pollingInterval = null;
+                        logSync('轮询同步已停止', 'info');
+                    }
+                }, 10000);
+
+            } catch (error) {
+                logSync(`❌ 轮询测试失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 页面加载时初始化
+        window.addEventListener('load', async () => {
+            logTask('页面加载完成，准备测试...', 'info');
+            await initClient();
+        });
+    </script>
+</body>
+
+</html>
