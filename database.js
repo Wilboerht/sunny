@@ -1,7 +1,6 @@
-// Supabase配置文件
 const SUPABASE_CONFIG = {
-    url: 'https://rwiulfkdkbkztxfehuuz.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3aXVsZmtka2JrenR4ZmVodXV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAwNTU4MTYsImV4cCI6MjA4NTYzMTgxNn0.mvjgJ5hHPBv3RP8u78IsA3t_i3FM72G80LnNN1q0hMI'
+    url: 'https://hljqzupnkovuyeiqiysj.supabase.co',
+    anonKey: 'sb_publishable_N2Z-GDquhsMx__PTYwHKEg_MVXo_1AT'
 };
 
 // 数据库操作类
