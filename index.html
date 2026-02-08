@@ -473,8 +473,11 @@
                             switch (payload.eventType) {
                                 case 'INSERT':
                                     const newTask = window.taskDB.transformFromDB(payload.new);
-                                    vueInstance.tasks.unshift(newTask);
-                                    vueInstance.showNotification('新任务', `"${payload.new.title}" 已添加`, 'info');
+                                    // 防止重复添加：如果本地列表已经包含该ID（由saveTask方法预先添加），则跳过
+                                    if (!vueInstance.tasks.some(t => t.id === newTask.id)) {
+                                        vueInstance.tasks.unshift(newTask);
+                                        vueInstance.showNotification('新任务', `"${payload.new.title}" 已添加`, 'info');
+                                    }
                                     break;
                                 case 'UPDATE':
                                     const updatedTask = window.taskDB.transformFromDB(payload.new);
