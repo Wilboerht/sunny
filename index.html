@@ -714,6 +714,8 @@
                                 userId: this.editingTask.userId
                             });
 
+                            // Realtime will update the list automatically, but for immediate feedback we update local state too
+                            // (Actually, if realtime is fast, we might not need this, but let's keep for responsiveness)
                             const index = this.tasks.findIndex(t => t.id === this.editingTask.id);
                             if (index > -1) {
                                 this.tasks.splice(index, 1, updatedTask);
@@ -722,15 +724,35 @@
                             this.showNotification('任务已更新', `任务"${this.taskForm.title}"已更新`, 'success');
                         } else {
                             // Create new task
+
+                            // 1. 生成唯一的ID (BigInt friendly number or just numeric)
+                            // Even if DB id is BigInt, JS number is fine as long as it's not too big. 
+                            // Date.now() + random is safe.
+                            const newId = window.taskDB.generateId();
+
                             const newTaskData = {
                                 ...this.taskForm,
+                                id: newId, // Explicitly provide ID to fix "null value in column id" error
                                 completed: false,
                                 notifiedToday: false,
                                 userId: this.getCurrentUserId()
                             };
 
+                            console.log('Attempting to create task with data:', JSON.stringify(newTaskData));
+
                             const newTask = await window.taskDB.createTask(newTaskData);
-                            this.tasks.unshift(newTask);
+
+                            // IMPORTANT: DO NOT add to this.tasks here!
+                            // Let the Realtime subscription handle the UI update to avoid duplicates.
+                            // However, if realtime is slow or fails, user sees nothing.
+                            // But since we fixed the duplicate issue in setupRealtimeSync by checking ID existence,
+                            // we CAN add it here for instant feedback.
+
+                            // Check if already added by realtime (race condition)
+                            if (!this.tasks.some(t => t.id === newTask.id)) {
+                                this.tasks.unshift(newTask);
+                            }
+
                             this.showNotification('任务已创建', `任务"${this.taskForm.title}"已创建`, 'success');
                         }
 
@@ -738,8 +760,12 @@
                     } catch (error) {
                         console.error('保存任务失败:', error);
                         // Show specific error message to user
-                        const errorMsg = error.message || '未知错误';
-                        this.showNotification('保存失败', `错误: ${errorMsg} (请检查是否运行了Supabase setup SQL)`, 'error');
+                        let errorMsg = error.message || '未知错误';
+                        if (error.code === '23505') errorMsg = '任务已存在 (ID冲突)';
+                        if (error.code === '23502') errorMsg = '缺少必填字段 (如ID或Title)';
+                        if (error.code === '42P01') errorMsg = '数据库表不存在 (请运行SQL Setup)';
+
+                        this.showNotification('保存失败', `错误: ${errorMsg}`, 'error');
                     }
                 },
 
