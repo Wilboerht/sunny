@@ -89,6 +89,8 @@ class TaskDatabase {
             taskToInsert.id = this.generateId();
         }
 
+        console.log('准备创建任务，发送数据:', JSON.stringify(taskToInsert, null, 2));
+
         const { data, error } = await this.client
             .from('tasks')
             .insert(this.transformToDB(taskToInsert))
@@ -96,7 +98,7 @@ class TaskDatabase {
             .single();
 
         if (error) {
-            console.error('创建任务失败:', error);
+            console.error('创建任务失败 (详细):', JSON.stringify(error, null, 2));
             throw error;
         }
 
