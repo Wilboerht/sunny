@@ -83,9 +83,15 @@ class TaskDatabase {
     async createTask(taskData) {
         if (!this.initialized) await this.initialize();
 
+        // 确保即使没有提供ID也能生成一个（解决数据库非空限制问题）
+        const taskToInsert = { ...taskData };
+        if (!taskToInsert.id) {
+            taskToInsert.id = this.generateId();
+        }
+
         const { data, error } = await this.client
             .from('tasks')
-            .insert(this.transformToDB(taskData))
+            .insert(this.transformToDB(taskToInsert))
             .select()
             .single();
 
